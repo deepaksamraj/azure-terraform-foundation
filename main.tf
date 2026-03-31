@@ -167,8 +167,10 @@ resource "azurerm_linux_virtual_machine" "main" {
   name                = "portfolio-vm"
   resource_group_name = azurerm_resource_group.main.name
   location            = var.location
-  size                = "Standard_B1s"
+  size                = "Standard_B2ats_v2"
+  zone                = "1" # force into zone 1
   admin_username      = "azureuser"
+
 
   network_interface_ids = [
     azurerm_network_interface.vm_nic.id
