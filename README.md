@@ -22,8 +22,8 @@ This project serves as a learning foundation for Azure cloud infrastructure and 
 | `azurerm_linux_virtual_machine` | Virtual Machine (VM) | Linux compute instance |
 | `azurerm_public_ip` | Public IP Address | Internet-accessible IP for the VM |
 | `azurerm_storage_account` | Storage Account | Blob storage equivalent to S3 |
-| `azurerm_managed_disk` | Managed Disk | Persistent storage for VMs |
-| `azurerm_monitor_alert` | Azure Monitor Alert | Infrastructure monitoring and alerting |
+| `azurerm_user_assigned_identity` | Managed Identity | Secure, passwordless access to Azure resources |
+| `azurerm_monitor_metric_alert` | Azure Monitor Alert | Infrastructure monitoring and alerting |
 
 ---
 
@@ -38,6 +38,7 @@ This project serves as a learning foundation for Azure cloud infrastructure and 
 | IAM Role | Managed Identity | Secure, passwordless access to Azure resources |
 | Security Group | Network Security Group (NSG) | Firewall rules for network traffic |
 | CloudWatch | Azure Monitor | Infrastructure monitoring and logging |
+| CloudWatch Alarms | Azure Monitor Alerts | Metric-based alerting |
 | Route 53 | Azure DNS | Domain name resolution |
 | EKS | AKS | Managed Kubernetes service |
 
@@ -72,16 +73,62 @@ This project serves as a learning foundation for Azure cloud infrastructure and 
 +----------------+
    |
    v
-+----------------+
-| Linux Virtual  |
-| Machine (VM)   |
-+----------------+
-   |
-   v
-+----------------+
-| Public IP      |
-+----------------+
++----------------+     +------------------+
+| Linux Virtual  |<--->| Managed Identity |
+| Machine (VM)   |     +------------------+
++----------------+            |
+   |                          v
+   v                   +------------------+
++----------------+     | Storage Account  |
+| Public IP      |     | + Blob Container |
++----------------+     +------------------+
+                              |
+                              v
+                       +------------------+
+                       | Azure Monitor    |
+                       | Alert (CPU >80%) |
+                       +------------------+
 ```
+
+---
+
+## Module Structure
+
+This project uses Terraform modules for reusable, maintainable infrastructure:
+
+```
+modules/
+├── storage_account/     # Storage Account + Blob Container
+│   ├── main.tf          # Storage account and container resources
+│   ├── variables.tf     # Input variables
+│   └── outputs.tf       # Output values
+├── managed_identity/    # Managed Identity (user-assigned)
+│   ├── main.tf          # Identity resource
+│   ├── variables.tf     # Input variables
+│   └── outputs.tf       # Output values
+└── monitor_alert/       # Azure Monitor Alert
+    ├── main.tf          # Metric alert resource
+    ├── variables.tf     # Input variables
+    └── outputs.tf       # Output values
+```
+
+### Module Details
+
+#### Storage Account Module
+- Creates a Standard LRS storage account
+- Enforces TLS 1.2 minimum
+- Disables public access
+- Creates a private blob container
+
+#### Managed Identity Module
+- Creates a user-assigned managed identity
+- Assigns Storage Blob Data Contributor role to the VM
+- Enables passwordless access to Azure resources
+
+#### Monitor Alert Module
+- Creates a metric alert for VM CPU usage
+- Configurable threshold, window size, and evaluation frequency
+- Auto-mitigation enabled
 
 ---
 
@@ -97,6 +144,15 @@ This project serves as a learning foundation for Azure cloud infrastructure and 
 - **Network Isolation:**
   - Public subnet for internet-facing resources
   - Private subnet for internal resources (currently unused but provisioned)
+- **Storage Security:**
+  - Public access disabled on storage account
+  - TLS 1.2 minimum enforced
+  - HTTPS traffic only
+  - Private blob container access
+- **Managed Identity:**
+  - User-assigned managed identity for secure, passwordless access to Azure resources
+  - Storage Blob Data Contributor role assigned to VM
+  - No credentials to manage or rotate
 
 ---
 
@@ -140,6 +196,10 @@ This supports:
    - `public_subnet_cidr`: CIDR for public subnet (e.g., `10.0.1.0/24`)
    - `private_subnet_cidr`: CIDR for private subnet (e.g., `10.0.2.0/24`)
    - `my_ip`: Your public IP address with `/32` suffix (e.g., `123.45.67.89/32`)
+   - `storage_account_name`: Globally unique storage account name (3-24 chars, lowercase + numbers)
+   - `container_name`: Name for the blob container (default: `data`)
+   - `identity_name`: Name for the managed identity (default: `vm-identity`)
+   - `threshold`: CPU alert threshold percentage (default: `80`)
 
 2. Ensure your SSH public key is at `~/.ssh/azure_key.pub`
 
@@ -158,12 +218,14 @@ terraform apply -auto-approve
 ### Post-Deployment
 - Connect to your VM: `ssh -i ~/.ssh/azure_key azureuser@<VM_PUBLIC_IP>`
 - Verify resources in Azure Portal or with `az resource list --resource-group <RESOURCE_GROUP_NAME>`
+- Test managed identity from VM: `az login --identity` then `az storage blob list --account-name <STORAGE_ACCOUNT_NAME> --container-name data`
+- Check alert status in Azure Portal under Monitor > Alerts
 
 ---
 
 ## Learning Journey: Reflection
 
-This repository represents my hands-on learning exercise for Day 5 of my cloud infrastructure journey, focusing on Azure fundamentals and Terraform implementation.
+This repository represents my hands-on learning exercise of my cloud infrastructure journey, focusing on Azure fundamentals and Terraform implementation.
 
 ### Current Implementation (Completed)
 - ✅ Resource Group with comprehensive tagging
@@ -171,11 +233,11 @@ This repository represents my hands-on learning exercise for Day 5 of my cloud i
 - ✅ Network Security Group with secure SSH and HTTP access rules
 - ✅ Linux Virtual Machine (Ubuntu 22.04 LTS) with public IP access
 - ✅ SSH key authentication and secure access
+- ✅ Storage Account + Blob Container (public access disabled, TLS 1.2 enforced)
+- ✅ Managed Identity (user-assigned with Storage Blob Data Contributor role)
+- ✅ Azure Monitor Alert (CPU >80% for 5 minutes)
 
 ### Planned Enhancements (Next Steps)
-- 🚧 **Storage Account + Blob Container:** S3 equivalent with public access disabled and TLS 1.2 enforcement
-- 🚧 **Managed Identity:** System-assigned identity for secure, passwordless access to Azure resources
-- 🚧 **Azure Monitor Alert:** CPU percentage alert on the VM (>80% for 5 minutes)
 - 🚧 **Remote State Management:** Azure Storage Account backend for production-grade state management
 - 🚧 **Azure Key Vault:** Centralized secrets and key management
 - 🚧 **AKS Cluster:** Managed Kubernetes for container workloads
