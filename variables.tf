@@ -2,7 +2,7 @@
 # File:         variables.tf
 # Author:       Deepak Devaraj
 # Version:      1.0.0
-# Date:         25-05-2026
+# Date:         08-04-2026
 # Status:       Development
 #
 # Purpose:
@@ -18,7 +18,7 @@
 #   
 #
 # Revision History:
-#   1.0.0   25-05-2026 DD  Initial release
+#   1.0.0   08-04-2026 DD  Initial release
 ##############################################################################
 variable "resource_group_name" {
   type        = string
