@@ -98,6 +98,10 @@ This project uses Terraform modules for reusable, maintainable infrastructure:
 
 ```
 modules/
+├── virtual_machine/     # Linux VM with networking and managed identity
+│   ├── main.tf          # VM, public IP, NIC, and NSG association
+│   ├── variables.tf     # Input variables
+│   └── outputs.tf       # Output values
 ├── storage_account/     # Storage Account + Blob Container
 │   ├── main.tf          # Storage account and container resources
 │   ├── variables.tf     # Input variables
@@ -113,6 +117,14 @@ modules/
 ```
 
 ### Module Details
+
+#### Virtual Machine Module
+- Provisions a Linux VM (Ubuntu 22.04 LTS) with configurable size and availability zone
+- Creates a static Standard SKU public IP address
+- Configures a network interface attached to the specified subnet
+- Associates the NIC with a Network Security Group
+- Attaches a User Assigned Managed Identity for passwordless Azure resource access
+- Supports configurable OS disk type, size, and VM image
 
 #### Storage Account Module
 - Creates a Standard LRS storage account
