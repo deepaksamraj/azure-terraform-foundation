@@ -215,19 +215,97 @@ terraform plan
 terraform apply -auto-approve
 ```
 
-### Post-Deployment
+## Post-Deployment Validation & Testing
+This section documents the manual validation steps performed to ensure the Azure resources provisioned by Terraform are working as expected.
+
+### 🐚 1. Azure VM 
 - Connect to your VM: `ssh -i ~/.ssh/azure_key azureuser@<VM_PUBLIC_IP>`
 - Verify resources in Azure Portal or with `az resource list --resource-group <RESOURCE_GROUP_NAME>`
-- Test managed identity from VM: `az login --identity` then `az storage blob list --account-name <STORAGE_ACCOUNT_NAME> --container-name data`
-- Check alert status in Azure Portal under Monitor > Alerts
+
+### 🔎 2. Managed Identity Verification
+
+The VM uses a System‑Assigned Managed Identity. To verify that the identity is active and issuing tokens:
+
+**Retrieve an Azure AD token from inside the VM:**
+
+```bash
+curl -H "Metadata: true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/"
+```
+
+A successful response returns a JSON payload containing:
+
+- `access_token`
+- `expires_in`
+- `token_type`
+
+This confirms the Managed Identity is active and functional.
+
+### ✅ 3. Storage Access Test Using Managed Identity
+
+To validate that the VM's Managed Identity has the correct RBAC permissions on the Storage Account:
+
+**Request a Storage‑scoped token:**
+
+```bash
+TOKEN=$(curl -H "Metadata: true" \
+  "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://storage.azure.com/" \
+  | jq -r '.access_token')
+```
+
+**List containers in the Storage Account:**
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+     -H "x-ms-version: 2020-10-02" \
+     "https://<storage-account-name>.blob.core.windows.net/?comp=list"
+```
+
+A successful response returns XML similar to:
+
+```xml
+<EnumerationResults>
+  <Containers>
+    <Container>
+      <Name>data</Name>
+      ...
+    </Container>
+  </Containers>
+</EnumerationResults>
+```
+
+This confirms:
+
+- The Managed Identity is authenticated
+- The Storage Account RBAC permissions are correct
+- The VM can access Storage without keys or passwords
+
+### ✅ 4. CPU Alert Test (Azure Monitor)
+
+To validate the CPU > 80% for 5 minutes alert:
+
+**Run a CPU spike script inside the VM:**
+
+```bash
+#!/bin/bash
+for i in {1..4}; do
+  while : ; do : ; done &
+done
+sleep 360
+killall bash
+```
+
+This generates sustained CPU load for 6 minutes.
+
+**Expected outcome:**
+
+- Azure Monitor fires the alert
+- Alert appears under **Monitor → Alerts** in the Azure Portal
+- Status transitions from **Fired → Resolved** once CPU returns to normal
 
 ---
 
-## Learning Journey: Reflection
-
-This repository represents my hands-on learning exercise of my cloud infrastructure journey, focusing on Azure fundamentals and Terraform implementation.
-
-### Current Implementation (Completed)
+## Current Implementation (Completed)
 - ✅ Resource Group with comprehensive tagging
 - ✅ Virtual Network with public and private subnets
 - ✅ Network Security Group with secure SSH and HTTP access rules
@@ -237,13 +315,11 @@ This repository represents my hands-on learning exercise of my cloud infrastruct
 - ✅ Managed Identity (user-assigned with Storage Blob Data Contributor role)
 - ✅ Azure Monitor Alert (CPU >80% for 5 minutes)
 
-### Planned Enhancements (Next Steps)
+## Planned Enhancements (Next Steps)
 - 🚧 **Remote State Management:** Azure Storage Account backend for production-grade state management
 - 🚧 **Azure Key Vault:** Centralized secrets and key management
 - 🚧 **AKS Cluster:** Managed Kubernetes for container workloads
 
-### Implementation Progress
-This repository follows a progressive learning approach where each feature builds upon the previous one, mirroring real-world infrastructure development practices.
 
 ---
 

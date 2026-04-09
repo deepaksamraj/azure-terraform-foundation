@@ -18,16 +18,9 @@
 #   
 #
 # Revision History:
-#   1.0.0   25-05-2026 DD  Initial release
+#   1.0.0   2026-04-08  Initial release
+#   1.0.1   2026-04-09  Updated modules
 ##############################################################################
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-  }
-}
 
 provider "azurerm" {
   skip_provider_registration = true
@@ -125,84 +118,28 @@ resource "azurerm_subnet_network_security_group_association" "public_assoc" {
   network_security_group_id = azurerm_network_security_group.public_nsg.id
 }
 
-resource "azurerm_public_ip" "vm_public_ip" {
-  name                = "vm-public-ip"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.main.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
+# =============================================================================
+# Virtual Machine
+# =============================================================================
 
-  tags = {
-    Environment = "dev"
-    Project     = "portfolio"
-    ManagedBy   = "terraform"
-  }
-}
+module "virtual_machine" {
+  source = "./modules/virtual_machine"
 
-resource "azurerm_network_interface" "vm_nic" {
-  name                = "vm-nic"
-  location            = var.location
-  resource_group_name = azurerm_resource_group.main.name
-
-  ip_configuration {
-    name                          = "internal"
-    subnet_id                     = azurerm_subnet.public.id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.vm_public_ip.id
-  }
-
-  tags = {
-    Environment = "dev"
-    Project     = "portfolio"
-    ManagedBy   = "terraform"
-  }
-}
-
-resource "azurerm_network_interface_security_group_association" "vm_nic_assoc" {
-  network_interface_id      = azurerm_network_interface.vm_nic.id
-  network_security_group_id = azurerm_network_security_group.public_nsg.id
-}
-
-resource "azurerm_linux_virtual_machine" "main" {
-  name                = "portfolio-vm"
   resource_group_name = azurerm_resource_group.main.name
   location            = var.location
-  size                = "Standard_B2ats_v2"
-  zone                = "1" # force into zone 1
+  vm_name             = "portfolio-vm"
+  vm_size             = "Standard_B2ats_v2"
+  availability_zone   = "1"
   admin_username      = "azureuser"
-
-
-  network_interface_ids = [
-    azurerm_network_interface.vm_nic.id
-  ]
-
-  admin_ssh_key {
-    username   = "azureuser"
-    public_key = file("~/.ssh/azure_key.pub")
-  }
-
-  os_disk {
-    caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
-    disk_size_gb         = 64
-  }
-
-  source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
-    version   = "latest"
-  }
+  ssh_public_key      = file("~/.ssh/azure_key.pub")
+  subnet_id           = azurerm_subnet.public.id
+  nsg_id              = azurerm_network_security_group.public_nsg.id
+  managed_identity_id = azurerm_user_assigned_identity.vm_identity.id
 
   tags = {
     Environment = "dev"
     Project     = "portfolio"
     ManagedBy   = "terraform"
-  }
-
-  identity {
-    type = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.vm_identity.id]
   }
 }
 
@@ -213,10 +150,10 @@ resource "azurerm_linux_virtual_machine" "main" {
 module "storage_account" {
   source = "./modules/storage_account"
 
-  resource_group_name  = azurerm_resource_group.main.name
-  location             = var.location
-  storage_account_name = var.storage_account_name
-  container_name       = var.container_name
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = var.location
+  storage_account_name  = var.storage_account_name
+  container_name        = var.container_name
   container_access_type = var.container_access_type
 
   tags = {
@@ -256,18 +193,18 @@ resource "azurerm_role_assignment" "vm_storage_role" {
 module "monitor_alert" {
   source = "./modules/monitor_alert"
 
-  resource_group_name = azurerm_resource_group.main.name
-  location            = var.location
-  vm_id               = azurerm_linux_virtual_machine.main.id
-  alert_name          = var.alert_name
-  alert_description   = var.alert_description
-  metric_name         = var.metric_name
-  aggregation         = var.aggregation
-  operator            = var.operator
-  threshold           = var.threshold
-  window_size         = var.window_size
+  resource_group_name  = azurerm_resource_group.main.name
+  location             = var.location
+  vm_id                = module.virtual_machine.vm_id
+  alert_name           = var.alert_name
+  alert_description    = var.alert_description
+  metric_name          = var.metric_name
+  aggregation          = var.aggregation
+  operator             = var.operator
+  threshold            = var.threshold
+  window_size          = var.window_size
   evaluation_frequency = var.evaluation_frequency
-  alert_severity      = var.alert_severity
+  alert_severity       = var.alert_severity
 
   tags = {
     Environment = "dev"
